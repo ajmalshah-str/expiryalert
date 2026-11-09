@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
 import AddProductModal from './components/AddProductModal';
+import StockRescue from './components/StockRescue';
 import { 
   LayoutDashboard, 
   Package, 
@@ -45,7 +46,6 @@ export default function App() {
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
 
-  // Auto-healing store fetcher: retrieves existing store or creates one automatically
   const fetchBusiness = async (userId: string) => {
     try {
       let { data } = await supabase
@@ -446,16 +446,15 @@ export default function App() {
           </div>
         )}
 
+        {/* Stock Rescue Tab */}
         {activeTab === 'rescue' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center space-y-3">
-            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto">
-              <Flame className="w-7 h-7" />
-            </div>
-            <h2 className="text-base font-bold text-slate-900">Stock Rescue Mode</h2>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Items nearing expiration will appear here with recommended action plans (e.g. 20% discount sticker, bundle promotion, or return to vendor).
-            </p>
-          </div>
+          <StockRescue
+            batches={batches}
+            businessId={businessId}
+            onStockUpdated={() => {
+              if (businessId) fetchInventory(businessId);
+            }}
+          />
         )}
 
         {activeTab === 'settings' && (
@@ -487,7 +486,7 @@ export default function App() {
         businessId={businessId}
       />
 
-      {/* Mobile-First Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-2 py-1 shadow-lg">
         <div className="max-w-md mx-auto grid grid-cols-5 text-center">
           <button
