@@ -45,7 +45,9 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
+  const [totalRescuedValue, setTotalRescuedValue] = useState<number>(0);
 
+  // Auto-healing store fetcher: retrieves existing store or creates one automatically
   const fetchBusiness = async (userId: string) => {
     try {
       let { data } = await supabase
@@ -80,6 +82,7 @@ export default function App() {
     }
   };
 
+  // Fetch active inventory batches and total rescued value from clearance sales
   const fetchInventory = async (bizId: string) => {
     setLoadingInventory(true);
     try {
@@ -107,6 +110,24 @@ export default function App() {
       if (!error && data) {
         setBatches(data as unknown as BatchItem[]);
       }
+
+      // Query total money recovered through clearance rescue sales
+      const { data: movements } = await supabase
+        .from('stock_movements')
+        .select('quantity_change, notes')
+        .eq('business_id', bizId)
+        .eq('movement_type', 'sale_fefo');
+
+      if (movements) {
+        let rescuedSum = 0;
+        movements.forEach((m) => {
+          const match = m.notes?.match(/₹(\d+(\.\d+)?)/);
+          const unitPrice = match ? parseFloat(match[1]) : 0;
+          const qty = Math.abs(m.quantity_change || 0);
+          rescuedSum += qty * unitPrice;
+        });
+        setTotalRescuedValue(rescuedSum);
+      }
     } catch (err) {
       console.error('Error fetching inventory:', err);
     } finally {
@@ -129,6 +150,7 @@ export default function App() {
         setBusinessId(null);
         setBusinessName('My Store');
         setBatches([]);
+        setTotalRescuedValue(0);
       }
       setLoading(false);
     });
@@ -140,6 +162,7 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
+  // Dashboard Risk Calculations
   const metrics = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -232,7 +255,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Signature Metric: Money at Risk */}
+            {/* Signature Metric: Total Purchase Value at Risk */}
             <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-6 shadow-md border border-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
@@ -290,12 +313,14 @@ export default function App() {
                   <span className="text-xs font-medium text-slate-500">Stock Rescued</span>
                   <ShieldCheck className="w-4 h-4" />
                 </div>
-                <div className="text-2xl font-bold text-emerald-600">₹0.00</div>
+                <div className="text-2xl font-bold text-emerald-600">
+                  ₹{totalRescuedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
                 <p className="text-[11px] text-slate-400">Protected this month</p>
               </div>
             </div>
 
-            {/* Tracked Batches List / Urgency Feed */}
+            {/* Urgent Batches Feed */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900">Urgent Batches Needing Attention</h3>
@@ -392,6 +417,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Inventory Batches Tab */}
         {activeTab === 'products' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -426,6 +452,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Scan Tab */}
         {activeTab === 'scan' && (
           <div className="bg-white rounded-xl border border-slate-200 p-8 text-center space-y-4">
             <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
@@ -446,7 +473,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Stock Rescue Tab */}
+        {/* Rescue Tab */}
         {activeTab === 'rescue' && (
           <StockRescue
             batches={batches}
@@ -457,6 +484,7 @@ export default function App() {
           />
         )}
 
+        {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
             <h2 className="text-base font-bold text-slate-900">Shop Settings</h2>
@@ -486,7 +514,7 @@ export default function App() {
         businessId={businessId}
       />
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile-First Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-2 py-1 shadow-lg">
         <div className="max-w-md mx-auto grid grid-cols-5 text-center">
           <button
