@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from './lib/supabase';
+import Auth from './components/Auth';
 import { 
   LayoutDashboard, 
   Package, 
@@ -9,12 +11,76 @@ import {
   TrendingDown, 
   Plus, 
   ShieldCheck,
-  Calendar
+  Calendar,
+  LogOut,
+  Store,
+  Loader2
 } from 'lucide-react';
 
 export default function App() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [businessName, setBusinessName] = useState<string>('My Store');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'scan' | 'rescue' | 'settings'>('dashboard');
 
+  // Check and listen to authentication status
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchBusiness(session.user.id);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchBusiness(session.user.id);
+      } else {
+        setBusinessName('My Store');
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch the registered store name
+  const fetchBusiness = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('name')
+        .eq('owner_id', userId)
+        .maybeSingle();
+
+      if (!error && data?.name) {
+        setBusinessName(data.name);
+      }
+    } catch (err) {
+      console.error('Error fetching business:', err);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  // 1. Loading screen while checking login status
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+        <p className="text-xs text-slate-500 font-medium">Loading ExpiryAlert...</p>
+      </div>
+    );
+  }
+
+  // 2. Show Auth screen if user is not logged in
+  if (!session) {
+    return <Auth onSuccess={() => {}} />;
+  }
+
+  // 3. Main Application Dashboard once authenticated
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-6">
       {/* Top Header */}
@@ -25,17 +91,31 @@ export default function App() {
               EA
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-900 leading-tight">ExpiryAlert</h1>
-              <p className="text-xs text-slate-500 font-medium">Daily Stock Loss Prevention</p>
+              <div className="flex items-center space-x-1.5">
+                <Store className="w-3.5 h-3.5 text-indigo-600" />
+                <h1 className="text-sm font-bold text-slate-900 leading-tight">{businessName}</h1>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">ExpiryAlert Loss Prevention</p>
             </div>
           </div>
-          <button 
-            onClick={() => setActiveTab('scan')}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 active:scale-95 transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Stock</span>
-          </button>
+
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => setActiveTab('scan')}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 active:scale-95 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Stock</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -59,7 +139,7 @@ export default function App() {
                 <span className="text-xs text-slate-400">calculated at cost price</span>
               </div>
               <p className="mt-3 text-xs text-slate-300 border-t border-slate-800 pt-3">
-                Identifies unsold inventory nearing expiration so you can rescue cash before it becomes a total write-off.
+                Unsold inventory nearing expiry. Rescuing stock early prevents total write-offs.
               </p>
             </div>
 
@@ -125,7 +205,7 @@ export default function App() {
         {activeTab === 'products' && (
           <div className="bg-white rounded-xl border border-slate-200 p-6 text-center space-y-2">
             <h2 className="text-lg font-bold text-slate-900">Product Inventory</h2>
-            <p className="text-xs text-slate-500">View and manage tracked grocery products and separate batches.</p>
+            <p className="text-xs text-slate-500">Manage tracked grocery products and batches.</p>
           </div>
         )}
 
@@ -144,9 +224,19 @@ export default function App() {
         )}
 
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center space-y-2">
-            <h2 className="text-lg font-bold text-slate-900">Settings & Business Profile</h2>
-            <p className="text-xs text-slate-500">Configure reminder thresholds and store details.</p>
+          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">Settings</h2>
+            <div className="text-xs text-slate-500 space-y-1">
+              <p>Logged in as: <strong className="text-slate-700">{session.user.email}</strong></p>
+              <p>Store: <strong className="text-slate-700">{businessName}</strong></p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100 transition"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out of Shop</span>
+            </button>
           </div>
         )}
       </main>
