@@ -3,6 +3,8 @@ import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
 import AddProductModal from './components/AddProductModal';
 import StockRescue from './components/StockRescue';
+import WhatsAppDigestModal from './components/WhatsAppDigestModal';
+import AuditReport from './components/AuditReport';
 import { 
   LayoutDashboard, 
   Package, 
@@ -16,8 +18,15 @@ import {
   Calendar, 
   LogOut, 
   Store, 
-  Loader2,
-  ChevronRight
+  Loader2, 
+  ChevronRight, 
+  MessageCircle, 
+  CheckCircle2,
+  Minus,
+  ShoppingCart,
+  X,
+  ArrowRight,
+  Search
 } from 'lucide-react';
 
 interface BatchItem {
@@ -42,12 +51,21 @@ export default function App() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState<string>('My Store');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'scan' | 'rescue' | 'settings'>('dashboard');
+  const [productFilter, setProductFilter] = useState<'active' | 'resolved' | 'all'>('active');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDigestOpen, setIsDigestOpen] = useState(false);
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [totalRescuedValue, setTotalRescuedValue] = useState<number>(0);
 
-  // Auto-healing store fetcher: retrieves existing store or creates one automatically
+  // Quick Sale / Deduct Modal State
+  const [sellingBatch, setSellingBatch] = useState<BatchItem | null>(null);
+  const [sellQty, setSellQty] = useState<number>(1);
+  const [submittingSale, setSubmittingSale] = useState(false);
+  const [saleError, setSaleError] = useState<string | null>(null);
+
+  // Auto-healing store fetcher
   const fetchBusiness = async (userId: string) => {
     try {
       let { data } = await supabase
@@ -82,7 +100,7 @@ export default function App() {
     }
   };
 
-  // Fetch active inventory batches and total rescued value from clearance sales
+  // Fetch all batches and total rescued value
   const fetchInventory = async (bizId: string) => {
     setLoadingInventory(true);
     try {
@@ -104,14 +122,12 @@ export default function App() {
           )
         `)
         .eq('business_id', bizId)
-        .gt('quantity', 0)
         .order('expiry_date', { ascending: true });
 
       if (!error && data) {
         setBatches(data as unknown as BatchItem[]);
       }
 
-      // Query total money recovered through clearance rescue sales
       const { data: movements } = await supabase
         .from('stock_movements')
         .select('quantity_change, notes')
@@ -162,6 +178,41 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
+  // Batches currently in stock
+  const activeBatches = useMemo(() => {
+    return batches.filter((b) => b.quantity > 0);
+  }, [batches]);
+
+  // Filtered and searched inventory list for Products tab
+  const displayedBatches = useMemo(() => {
+    let list = batches;
+
+    if (productFilter === 'active') {
+      list = batches.filter((b) => b.quantity > 0);
+    } else if (productFilter === 'resolved') {
+      list = batches.filter((b) => b.quantity === 0);
+    }
+
+    if (!searchQuery.trim()) return list;
+
+    const query = searchQuery.toLowerCase().trim();
+    return list.filter((b) => {
+      const name = b.products?.name?.toLowerCase() || '';
+      const brand = b.products?.brand?.toLowerCase() || '';
+      const category = b.products?.category?.toLowerCase() || '';
+      const barcode = b.products?.barcode?.toLowerCase() || '';
+      const batchNo = b.batch_number?.toLowerCase() || '';
+
+      return (
+        name.includes(query) ||
+        brand.includes(query) ||
+        category.includes(query) ||
+        barcode.includes(query) ||
+        batchNo.includes(query)
+      );
+    });
+  }, [batches, productFilter, searchQuery]);
+
   // Dashboard Risk Calculations
   const metrics = useMemo(() => {
     const today = new Date();
@@ -172,7 +223,7 @@ export default function App() {
     let expiring30DaysCount = 0;
     let expiredLoss = 0;
 
-    batches.forEach((batch) => {
+    activeBatches.forEach((batch) => {
       const exp = new Date(batch.expiry_date);
       exp.setHours(0, 0, 0, 0);
       const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -190,7 +241,7 @@ export default function App() {
     });
 
     return { moneyAtRisk, expiring7DaysCount, expiring30DaysCount, expiredLoss };
-  }, [batches]);
+  }, [activeBatches]);
 
   const getDaysRemaining = (expiryDateStr: string) => {
     const today = new Date();
@@ -198,6 +249,57 @@ export default function App() {
     const exp = new Date(expiryDateStr);
     exp.setHours(0, 0, 0, 0);
     return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  // Open Quick Sale Modal
+  const openSaleModal = (batch: BatchItem) => {
+    setSellingBatch(batch);
+    setSellQty(1);
+    setSaleError(null);
+  };
+
+  // Confirm Quick Sale
+  const handleConfirmSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sellingBatch || !businessId) return;
+
+    if (sellQty <= 0 || sellQty > sellingBatch.quantity) {
+      setSaleError(`Quantity must be between 1 and ${sellingBatch.quantity}`);
+      return;
+    }
+
+    setSubmittingSale(true);
+    setSaleError(null);
+
+    try {
+      const priceUnit = sellingBatch.selling_price || sellingBatch.purchase_price;
+      const notes = `Regular Sale @ MRP ₹${priceUnit}/unit`;
+
+      const { error: moveError } = await supabase.from('stock_movements').insert({
+        batch_id: sellingBatch.id,
+        business_id: businessId,
+        movement_type: 'sale_fefo',
+        quantity_change: -Math.abs(sellQty),
+        notes: notes,
+      });
+
+      if (moveError) throw moveError;
+
+      const newQty = sellingBatch.quantity - sellQty;
+      const { error: updateError } = await supabase
+        .from('product_batches')
+        .update({ quantity: newQty })
+        .eq('id', sellingBatch.id);
+
+      if (updateError) throw updateError;
+
+      setSellingBatch(null);
+      fetchInventory(businessId);
+    } catch (err: any) {
+      setSaleError(err.message || 'Failed to record sale.');
+    } finally {
+      setSubmittingSale(false);
+    }
   };
 
   if (loading) {
@@ -255,7 +357,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Signature Metric: Total Purchase Value at Risk */}
+            {/* Signature Metric Card */}
             <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-6 shadow-md border border-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
@@ -272,9 +374,19 @@ export default function App() {
                 </span>
                 <span className="text-xs text-slate-400">cost value</span>
               </div>
-              <p className="mt-3 text-xs text-slate-300 border-t border-slate-800 pt-3">
-                Unsold inventory nearing expiry. Rescuing stock early prevents total write-offs.
-              </p>
+              
+              <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-xs text-slate-300">
+                  Unsold inventory nearing expiry. Rescuing stock early prevents write-offs.
+                </p>
+                <button
+                  onClick={() => setIsDigestOpen(true)}
+                  className="inline-flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-sm transition active:scale-95 shrink-0"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp Staff Digest</span>
+                </button>
+              </div>
             </div>
 
             {/* Quick Status Cards Grid */}
@@ -326,9 +438,12 @@ export default function App() {
                 <h3 className="text-sm font-bold text-slate-900">Urgent Batches Needing Attention</h3>
                 <span 
                   className="text-xs text-indigo-600 font-semibold cursor-pointer hover:underline" 
-                  onClick={() => setActiveTab('products')}
+                  onClick={() => {
+                    setProductFilter('active');
+                    setActiveTab('products');
+                  }}
                 >
-                  View All ({batches.length})
+                  View All ({activeBatches.length})
                 </span>
               </div>
 
@@ -337,26 +452,26 @@ export default function App() {
                   <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto mb-2" />
                   <p className="text-xs text-slate-500">Loading shop batches...</p>
                 </div>
-              ) : batches.length === 0 ? (
+              ) : activeBatches.length === 0 ? (
                 <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-3">
                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
                     <Package className="w-6 h-6" />
                   </div>
-                  <h3 className="text-base font-semibold text-slate-900">No stock tracked yet</h3>
+                  <h3 className="text-base font-semibold text-slate-900">No active stock nearing expiry</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Record your first grocery item or packaged batch to start monitoring expiration dates.
+                    All current inventory batches are safe or resolved. Record new cartons to keep tracking.
                   </p>
                   <button 
                     onClick={() => setIsModalOpen(true)}
                     className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 transition"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Add First Batch</span>
+                    <span>Add New Batch</span>
                   </button>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {batches.slice(0, 5).map((batch) => {
+                  {activeBatches.slice(0, 5).map((batch) => {
                     const days = getDaysRemaining(batch.expiry_date);
                     let badgeClass = 'bg-slate-100 text-slate-700';
                     let statusLabel = `${days} days left`;
@@ -417,37 +532,143 @@ export default function App() {
           </div>
         )}
 
-        {/* Inventory Batches Tab */}
+        {/* Inventory Batches Tab with Search & Quick Sale */}
         {activeTab === 'products' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Inventory Batches</h2>
-                <p className="text-xs text-slate-500">Track separate expiry dates and quantities per product.</p>
+                <p className="text-xs text-slate-500">Manage shelf stock, record customer sales, or inspect past resolved history.</p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(true)}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700"
+                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 self-start sm:self-auto"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Stock</span>
               </button>
             </div>
 
-            <div className="space-y-2">
-              {batches.map((batch) => (
-                <div key={batch.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-sm text-slate-900">{batch.products?.name}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Batch #{batch.batch_number} • Qty: <strong>{batch.quantity}</strong> • Cost: ₹{batch.purchase_price} {batch.selling_price ? `• MRP: ₹${batch.selling_price}` : ''}
+            {/* Search Input Bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search by product name, brand, barcode, batch..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Toggle Buttons */}
+            <div className="flex space-x-1 bg-slate-200/70 p-1 rounded-xl w-fit text-xs font-semibold">
+              <button
+                onClick={() => setProductFilter('active')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  productFilter === 'active'
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                In Stock ({activeBatches.length})
+              </button>
+
+              <button
+                onClick={() => setProductFilter('resolved')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  productFilter === 'resolved'
+                    ? 'bg-white text-emerald-700 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Resolved / Out of Stock ({batches.filter((b) => b.quantity === 0).length})
+              </button>
+
+              <button
+                onClick={() => setProductFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  productFilter === 'all'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All Records ({batches.length})
+              </button>
+            </div>
+
+            {/* Batches Feed */}
+            <div className="space-y-2.5">
+              {displayedBatches.length === 0 ? (
+                <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500 space-y-1">
+                  <p className="font-semibold text-slate-700">No matching products found</p>
+                  {searchQuery && (
+                    <p className="text-[11px] text-slate-400">
+                      No results for &quot;{searchQuery}&quot;. Try clearing the search or checking another filter tab.
                     </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-semibold text-indigo-600">Exp: {batch.expiry_date}</span>
-                  </div>
+                  )}
                 </div>
-              ))}
+              ) : (
+                displayedBatches.map((batch) => {
+                  const isResolved = batch.quantity === 0;
+
+                  return (
+                    <div 
+                      key={batch.id} 
+                      className={`p-4 rounded-xl border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                        isResolved ? 'bg-slate-50 border-slate-200 opacity-80' : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-semibold text-sm text-slate-900">{batch.products?.name}</h4>
+                          {isResolved ? (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Resolved
+                            </span>
+                          ) : (
+                            batch.products?.brand && (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                {batch.products.brand}
+                              </span>
+                            )
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Batch #{batch.batch_number} • Qty: <strong className={isResolved ? 'text-slate-400' : 'text-slate-900 text-sm'}>{batch.quantity} units</strong> • Cost: ₹{Number(batch.purchase_price).toFixed(2)} {batch.selling_price ? `• MRP: ₹${batch.selling_price}` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between sm:justify-end space-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <div className="text-left sm:text-right">
+                          <span className="text-xs font-semibold text-indigo-600">Exp: {batch.expiry_date}</span>
+                        </div>
+
+                        {!isResolved && (
+                          <button
+                            type="button"
+                            onClick={() => openSaleModal(batch)}
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold shadow-sm active:scale-95 transition"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <span>− Sell Units</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -476,7 +697,7 @@ export default function App() {
         {/* Rescue Tab */}
         {activeTab === 'rescue' && (
           <StockRescue
-            batches={batches}
+            batches={activeBatches}
             businessId={businessId}
             onStockUpdated={() => {
               if (businessId) fetchInventory(businessId);
@@ -486,23 +707,151 @@ export default function App() {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-            <h2 className="text-base font-bold text-slate-900">Shop Settings</h2>
-            <div className="text-xs text-slate-600 space-y-2 border-b border-slate-100 pb-4">
-              <div>Store Name: <strong className="text-slate-900">{businessName}</strong></div>
-              <div>Account Email: <strong className="text-slate-900">{session.user.email}</strong></div>
-              <div>Currency: <strong className="text-slate-900">INR (₹)</strong></div>
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
+              <h2 className="text-base font-bold text-slate-900">Shop Settings</h2>
+              <div className="text-xs text-slate-600 space-y-2 border-b border-slate-100 pb-4">
+                <div>Store Name: <strong className="text-slate-900">{businessName}</strong></div>
+                <div>Account Email: <strong className="text-slate-900">{session.user.email}</strong></div>
+                <div>Currency: <strong className="text-slate-900">INR (₹)</strong></div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center space-x-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100 transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out of Shop</span>
+              </button>
             </div>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100 transition"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out of Shop</span>
-            </button>
+
+            {/* GST & Tax Loss Audit Report Module */}
+            <AuditReport businessId={businessId} businessName={businessName} />
           </div>
         )}
       </main>
+
+      {/* Quick Sale / Deduct Modal */}
+      {sellingBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <ShoppingCart className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Record Customer Sale</h3>
+                  <p className="text-[11px] text-slate-500">Deduct sold units from shelf stock</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSellingBatch(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+              <div className="font-bold text-slate-900">{sellingBatch.products?.name}</div>
+              <div className="text-slate-500">
+                Batch #{sellingBatch.batch_number} • Currently on shelf: <strong className="text-slate-800">{sellingBatch.quantity} units</strong>
+              </div>
+              <div className="text-slate-500">
+                Tag Price: <strong className="text-slate-800">₹{sellingBatch.selling_price || sellingBatch.purchase_price}</strong>
+              </div>
+            </div>
+
+            {saleError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">
+                {saleError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmSale} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Units Sold
+                  </label>
+                  <div className="flex space-x-1">
+                    {[1, 2, 5].map((preset) => (
+                      preset <= sellingBatch.quantity && (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setSellQty(preset)}
+                          className="px-2 py-0.5 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold transition"
+                        >
+                          +{preset}
+                        </button>
+                      )
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSellQty(sellingBatch.quantity)}
+                      className="px-2 py-0.5 text-[11px] bg-slate-100 hover:bg-slate-200 text-indigo-700 rounded font-semibold transition"
+                    >
+                      All ({sellingBatch.quantity})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setSellQty(Math.max(1, sellQty - 1))}
+                    className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold active:scale-95 transition"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+
+                  <input
+                    type="number"
+                    min="1"
+                    max={sellingBatch.quantity}
+                    required
+                    value={sellQty}
+                    onChange={(e) => setSellQty(parseInt(e.target.value, 10) || 1)}
+                    className="flex-1 h-10 text-center font-bold text-lg border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setSellQty(Math.min(sellingBatch.quantity, sellQty + 1))}
+                    className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold active:scale-95 transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Total Sale Value Summary */}
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                <span className="text-[11px] text-emerald-700">Total Customer Billed: </span>
+                <strong className="text-emerald-800 text-sm">
+                  ₹{(sellQty * Number(sellingBatch.selling_price || sellingBatch.purchase_price)).toFixed(2)}
+                </strong>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingSale}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+              >
+                {submittingSale ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <span>Confirm Sale & Deduct {sellQty} Unit(s)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Stock Entry Modal */}
       <AddProductModal
@@ -512,6 +861,15 @@ export default function App() {
           if (businessId) fetchInventory(businessId);
         }}
         businessId={businessId}
+      />
+
+      {/* WhatsApp Staff Digest Modal */}
+      <WhatsAppDigestModal
+        isOpen={isDigestOpen}
+        onClose={() => setIsDigestOpen(false)}
+        businessName={businessName}
+        batches={activeBatches}
+        moneyAtRisk={metrics.moneyAtRisk}
       />
 
       {/* Mobile-First Bottom Navigation Bar */}

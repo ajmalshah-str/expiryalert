@@ -9,7 +9,11 @@ import {
   Loader2, 
   ArrowRight,
   X,
-  Percent
+  Percent,
+  MessageCircle,
+  FileText,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface BatchItem {
@@ -34,22 +38,40 @@ interface StockRescueProps {
   onStockUpdated: () => void;
 }
 
+interface ReturnMemoData {
+  productName: string;
+  brand: string | null;
+  batchNumber: string;
+  expiryDate: string;
+  quantity: number;
+  purchasePrice: number;
+  totalCreditClaim: number;
+  distributorName: string;
+  distributorPhone: string;
+}
+
 export default function StockRescue({ batches, businessId, onStockUpdated }: StockRescueProps) {
   const [selectedBatch, setSelectedBatch] = useState<BatchItem | null>(null);
   const [actionType, setActionType] = useState<'sale_fefo' | 'returned' | 'expired'>('sale_fefo');
   const [actionQty, setActionQty] = useState<number>(1);
   const [customPrice, setCustomPrice] = useState<string>('');
   const [actionNotes, setActionNotes] = useState<string>('');
+  
+  // Distributor Return specific state
+  const [distributorName, setDistributorName] = useState<string>('');
+  const [distributorPhone, setDistributorPhone] = useState<string>('');
+  const [generatedReturnMemo, setGeneratedReturnMemo] = useState<ReturnMemoData | null>(null);
+  const [copiedMemo, setCopiedMemo] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Store owner custom discount overrides per batch (keyed by batch id)
+  // Discount percentage overrides per batch
   const [discountOverrides, setDiscountOverrides] = useState<Record<string, number>>({});
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Batches expiring within 30 days or already expired
   const rescueBatches = batches.filter((b) => {
     const exp = new Date(b.expiry_date);
     exp.setHours(0, 0, 0, 0);
@@ -97,6 +119,8 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
     setActionQty(batch.quantity);
     setCustomPrice(data.clearancePrice.toString());
     setActionNotes('');
+    setDistributorName('');
+    setDistributorPhone('');
     setErrorMsg(null);
   };
 
@@ -113,8 +137,18 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
     setErrorMsg(null);
 
     try {
-      const priceNote = actionType === 'sale_fefo' ? `Sold @ ₹${customPrice}/unit` : '';
-      const finalNotes = [priceNote, actionNotes.trim()].filter(Boolean).join(' • ');
+      let finalNotes = '';
+      if (actionType === 'sale_fefo') {
+        const priceNote = `Sold @ ₹${customPrice}/unit`;
+        finalNotes = [priceNote, actionNotes.trim()].filter(Boolean).join(' • ');
+      } else if (actionType === 'returned') {
+        const returnInfo = `Returned to: ${distributorName || 'Distributor'}`;
+        const phoneInfo = distributorPhone ? `(Ph: ${distributorPhone})` : '';
+        const creditValue = `Credit Claim: ₹${(actionQty * Number(selectedBatch.purchase_price)).toFixed(2)}`;
+        finalNotes = [returnInfo, phoneInfo, creditValue, actionNotes.trim()].filter(Boolean).join(' • ');
+      } else {
+        finalNotes = ['Dead-stock Write-off', actionNotes.trim()].filter(Boolean).join(' • ');
+      }
 
       const { error: moveError } = await supabase.from('stock_movements').insert({
         batch_id: selectedBatch.id,
@@ -134,6 +168,21 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
 
       if (updateError) throw updateError;
 
+      // If this was a supplier return, save details for the return slip preview
+      if (actionType === 'returned') {
+        setGeneratedReturnMemo({
+          productName: selectedBatch.products?.name || 'Product',
+          brand: selectedBatch.products?.brand || null,
+          batchNumber: selectedBatch.batch_number,
+          expiryDate: selectedBatch.expiry_date,
+          quantity: actionQty,
+          purchasePrice: Number(selectedBatch.purchase_price),
+          totalCreditClaim: actionQty * Number(selectedBatch.purchase_price),
+          distributorName: distributorName.trim() || 'Store Distributor',
+          distributorPhone: distributorPhone.replace(/[^0-9]/g, ''),
+        });
+      }
+
       setSelectedBatch(null);
       onStockUpdated();
     } catch (err: any) {
@@ -141,6 +190,41 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const buildDistributorWhatsAppText = (memo: ReturnMemoData) => {
+    const dateStr = new Date().toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    let txt = `📋 *STOCK RETURN & CREDIT CLAIM MEMO*\n`;
+    txt += `📅 *Date:* ${dateStr}\n`;
+    txt += `🏢 *Distributor:* ${memo.distributorName}\n`;
+    txt += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    txt += `*Item:* ${memo.productName} ${memo.brand ? `(${memo.brand})` : ''}\n`;
+    txt += `*Batch #:* ${memo.batchNumber}\n`;
+    txt += `*Expiry Date:* ${memo.expiryDate}\n`;
+    txt += `*Return Quantity:* ${memo.quantity} units\n`;
+    txt += `*Cost / Unit:* ₹${memo.purchasePrice.toFixed(2)}\n`;
+    txt += `💰 *Total Credit Due:* ₹${memo.totalCreditClaim.toFixed(2)}\n`;
+    txt += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    txt += `_Handed over to agency representative for return replacement or invoice credit note deduction._`;
+    return txt;
+  };
+
+  const handleCopyMemo = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedMemo(true);
+    setTimeout(() => setCopiedMemo(false), 2000);
+  };
+
+  const handleSendDistributorWhatsApp = (memo: ReturnMemoData) => {
+    const text = buildDistributorWhatsAppText(memo);
+    const encoded = encodeURIComponent(text);
+    const target = memo.distributorPhone ? `https://api.whatsapp.com/send?phone=91${memo.distributorPhone}&text=${encoded}` : `https://api.whatsapp.com/send?text=${encoded}`;
+    window.open(target, '_blank');
   };
 
   return (
@@ -152,7 +236,7 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
           <h2 className="text-xl font-bold">Stock Rescue Mode</h2>
         </div>
         <p className="text-xs text-amber-50 max-w-xl mt-1 leading-relaxed">
-          Set custom discount offers or clearances to sell nearing-expiry goods before they turn into dead-stock losses.
+          Mark down shelf prices or generate supplier return slips before near-expiry batches become dead-stock losses.
         </p>
       </div>
 
@@ -223,7 +307,6 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
                         Set Your Clearance Offer:
                       </span>
 
-                      {/* Quick preset chips */}
                       <div className="flex items-center space-x-1.5">
                         <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
                         {[15, 25, 40, 50].map((preset) => (
@@ -243,9 +326,7 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
                       </div>
                     </div>
 
-                    {/* Controls Row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      {/* Owner Discount Input */}
                       <div className="flex items-center space-x-2">
                         <label className="text-xs text-slate-600 font-medium shrink-0">
                           Discount %:
@@ -263,7 +344,6 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
                         </div>
                       </div>
 
-                      {/* Resulting Price Banner */}
                       <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-200">
                         <span className="text-[11px] text-slate-500">
                           Clearance MRP: <span className="line-through text-slate-400">₹{basePrice.toFixed(0)}</span>
@@ -290,7 +370,7 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
 
                       <button
                         onClick={() => openActionModal(batch, 'returned')}
-                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 border border-slate-200 transition"
+                        className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 border border-indigo-200 transition"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>Return to Supplier</span>
@@ -315,9 +395,11 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
       {/* Action Dialog */}
       {selectedBatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Record Stock Clearance</h3>
+              <h3 className="text-sm font-bold text-slate-900">
+                {actionType === 'returned' ? 'Supplier Return & Credit Claim' : 'Record Stock Resolution'}
+              </h3>
               <button
                 onClick={() => setSelectedBatch(null)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
@@ -340,56 +422,96 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
             <form onSubmit={handleConfirmAction} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Action Type
+                  Resolution Type
                 </label>
                 <select
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value as any)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
                 >
+                  <option value="returned">Return to Distributor / Supplier (Claim Credit)</option>
                   <option value="sale_fefo">Sold at Clearance / Discount (Rescued)</option>
-                  <option value="returned">Returned to Distributor / Supplier</option>
                   <option value="expired">Dispose / Write-off Dead Stock</option>
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* Units Input */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Units to Return / Resolve (Max {selectedBatch.quantity})
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={selectedBatch.quantity}
+                  required
+                  value={actionQty}
+                  onChange={(e) => setActionQty(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* If Clearance Sale */}
+              {actionType === 'sale_fefo' && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Units Sold (Max {selectedBatch.quantity})
+                    Clearance Selling Price (₹/unit)
                   </label>
                   <input
                     type="number"
+                    step="0.5"
                     min="1"
-                    max={selectedBatch.quantity}
                     required
-                    value={actionQty}
-                    onChange={(e) => setActionQty(parseInt(e.target.value, 10) || 1)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    value={customPrice}
+                    onChange={(e) => setCustomPrice(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold text-emerald-600"
                   />
+                  <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 font-medium text-center">
+                    Total Recovered: <strong>₹{(actionQty * (parseFloat(customPrice) || 0)).toFixed(2)}</strong>
+                  </div>
                 </div>
+              )}
 
-                {actionType === 'sale_fefo' ? (
+              {/* If Supplier Return */}
+              {actionType === 'returned' && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1 text-xs">
+                    <div className="text-slate-600 flex justify-between">
+                      <span>Unit Cost:</span>
+                      <strong>₹{Number(selectedBatch.purchase_price).toFixed(2)}</strong>
+                    </div>
+                    <div className="text-indigo-900 font-bold flex justify-between text-sm pt-1 border-t border-indigo-200">
+                      <span>Total Credit Claim Due:</span>
+                      <span>₹{(actionQty * Number(selectedBatch.purchase_price)).toFixed(2)}</span>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Final Price (₹/unit)
+                      Distributor / Agency Name *
                     </label>
                     <input
-                      type="number"
-                      step="0.5"
-                      min="1"
+                      type="text"
                       required
-                      value={customPrice}
-                      onChange={(e) => setCustomPrice(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold text-emerald-600"
+                      value={distributorName}
+                      onChange={(e) => setDistributorName(e.target.value)}
+                      placeholder="e.g. Metro Food Distributors"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                ) : null}
-              </div>
 
-              {actionType === 'sale_fefo' && (
-                <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 font-medium text-center">
-                  Total Money Recovered: <strong>₹{(actionQty * (parseFloat(customPrice) || 0)).toFixed(2)}</strong>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Distributor WhatsApp / Phone (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      value={distributorPhone}
+                      onChange={(e) => setDistributorPhone(e.target.value)}
+                      placeholder="10-digit number (e.g. 9846012345)"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -401,7 +523,7 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
                   type="text"
                   value={actionNotes}
                   onChange={(e) => setActionNotes(e.target.value)}
-                  placeholder="e.g. Cleared via shelf promo"
+                  placeholder="e.g. Handed to delivery driver"
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -416,13 +538,72 @@ export default function StockRescue({ batches, businessId, onStockUpdated }: Sto
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <span>Confirm & Update Stock</span>
+                      <span>{actionType === 'returned' ? 'Confirm Return & Create Slip' : 'Confirm & Update Stock'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Generated Return Memo Success Modal */}
+      {generatedReturnMemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Distributor Credit Slip</h3>
+                  <p className="text-[11px] text-slate-500">Claim credit from distributor</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setGeneratedReturnMemo(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Memo Preview Box */}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs font-mono text-slate-700 whitespace-pre-wrap leading-relaxed shadow-inner max-h-56 overflow-y-auto">
+              {buildDistributorWhatsAppText(generatedReturnMemo)}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleCopyMemo(buildDistributorWhatsAppText(generatedReturnMemo))}
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition border border-slate-200"
+              >
+                {copiedMemo ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-700 font-bold">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Copy Slip</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendDistributorWhatsApp(generatedReturnMemo)}
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 active:scale-95 transition"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp Rep</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
