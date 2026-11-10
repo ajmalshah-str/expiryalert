@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShieldAlert, Mail, Lock, Eye, EyeOff, ArrowRight, Store, Languages } from 'lucide-react';
 
-export const Auth: React.FC = () => {
+interface AuthProps {
+  onSuccess?: () => void;
+}
+
+export const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,6 +72,10 @@ export const Auth: React.FC = () => {
           password,
         });
         if (error) throw error;
+      }
+
+      if (onSuccess) {
+        onSuccess();
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Authentication failed. Please check credentials.');
