@@ -28,7 +28,8 @@ import {
   X,
   ArrowRight,
   Search,
-  Crown
+  Crown,
+  Languages
 } from 'lucide-react';
 
 interface BatchItem {
@@ -49,6 +50,99 @@ interface BatchItem {
 
 const FREE_PRODUCT_LIMIT = 30;
 
+const UI_COPY = {
+  en: {
+    subtitle: 'ExpiryAlert Loss Prevention',
+    addStock: 'Add Stock',
+    freePlan: 'Free Plan',
+    productsUsed: 'products used',
+    upgradeCta: 'Upgrade (₹149/mo)',
+    riskHeader: 'Total Stock Purchase Value at Risk',
+    expiring30Badge: 'Expiring in ≤ 30 Days',
+    costValue: 'cost value',
+    riskDesc: 'Unsold inventory nearing expiry. Rescuing stock early prevents write-offs.',
+    whatsappDigest: 'WhatsApp Staff Digest',
+    exp7Days: 'Expiring ≤ 7 Days',
+    exp7Sub: 'Immediate action needed',
+    exp30Days: 'Expiring ≤ 30 Days',
+    exp30Sub: 'Monitor closely',
+    alreadyExpired: 'Already Expired',
+    deadStock: 'Dead stock write-off',
+    stockRescued: 'Stock Rescued',
+    protectedMonth: 'Protected this month',
+    urgentTitle: 'Urgent Batches Needing Attention',
+    viewAll: 'View All',
+    noActiveStock: 'No active stock nearing expiry',
+    noActiveDesc: 'All current inventory batches are safe or resolved. Record new cartons to keep tracking.',
+    addNewBatch: 'Add New Batch',
+    inventoryTitle: 'Inventory Batches',
+    inventoryDesc: 'Manage shelf stock, record customer sales, or inspect past resolved history.',
+    searchPlaceholder: 'Search by product name, brand, barcode, batch...',
+    inStock: 'In Stock',
+    resolvedTab: 'Resolved / Out of Stock',
+    allRecords: 'All Records',
+    sellUnits: '− Sell Units',
+    shopSettings: 'Shop Settings',
+    storeName: 'Store Name',
+    accountEmail: 'Account Email',
+    currency: 'Currency',
+    subPlan: 'Subscription Plan',
+    proPlanDesc: 'Pro Plan (Unlimited Products)',
+    freeStarterDesc: 'Free Starter',
+    signOut: 'Sign Out of Shop',
+    navDashboard: 'Dashboard',
+    navProducts: 'Products',
+    navAdd: 'Add',
+    navRescue: 'Rescue',
+    navSettings: 'Settings',
+  },
+  ml: {
+    subtitle: 'സ്റ്റോക്ക് നഷ്ടം തടയാനുള്ള സംവിധാനം',
+    addStock: 'സ്റ്റോക്ക് ചേർക്കുക',
+    freePlan: 'സൗജന്യ പ്ലാൻ',
+    productsUsed: 'ഉൽപ്പന്നങ്ങൾ ചേർത്തു',
+    upgradeCta: 'Pro ആക്കുക (₹149/മാസം)',
+    riskHeader: 'കാലാവധി കഴിയാറായ സ്റ്റോക്കിന്റെ മൂല്യം',
+    expiring30Badge: '≤ 30 ദിവസത്തിനുള്ളിൽ',
+    costValue: 'വാങ്ങിയ വില',
+    riskDesc: 'കാലാവധി അടുത്ത സാധനങ്ങൾ നേരത്തെ വിറ്റഴിക്കുന്നത് നഷ്ടം ഒഴിവാക്കും.',
+    whatsappDigest: 'WhatsApp സ്റ്റാഫ് റിപ്പോർട്ട്',
+    exp7Days: '≤ 7 ദിവസത്തിനുള്ളിൽ',
+    exp7Sub: 'ഉടൻ ശ്രദ്ധിക്കേണ്ടവ',
+    exp30Days: '≤ 30 ദിവസത്തിനുള്ളിൽ',
+    exp30Sub: 'നിരീക്ഷിക്കേണ്ടവ',
+    alreadyExpired: 'കാലാവധി കഴിഞ്ഞവ',
+    deadStock: 'നഷ്ടമായ സ്റ്റോക്ക്',
+    stockRescued: 'രക്ഷപ്പെടുത്തിയ സ്റ്റോക്ക്',
+    protectedMonth: 'ഈ മാസം ലാഭിച്ചത്',
+    urgentTitle: 'ഉടൻ ശ്രദ്ധിക്കേണ്ട ബാച്ചുകൾ',
+    viewAll: 'എല്ലാം കാണുക',
+    noActiveStock: 'കാലാവധി അടുത്ത സ്റ്റോക്കുകൾ ഒന്നുമില്ല',
+    noActiveDesc: 'നിലവിലുള്ള എല്ലാ സാധനങ്ങളും സുരക്ഷിതമാണ്. പുതിയ സ്റ്റോക്ക് ചേർക്കാവുന്നതാണ്.',
+    addNewBatch: 'പുതിയ ബാച്ച് ചേർക്കുക',
+    inventoryTitle: 'സ്റ്റോക്ക് ബാച്ചുകൾ',
+    inventoryDesc: 'കടയിലെ സ്റ്റോക്ക് നിയന്ത്രിക്കാനും വിൽപ്പന രേഖപ്പെടുത്താനും.',
+    searchPlaceholder: 'സാധനത്തിന്റെ പേര്, ബ്രാൻഡ്, ബാർകോഡ് തിരയുക...',
+    inStock: 'സ്റ്റോക്കുള്ളവ',
+    resolvedTab: 'തീർന്നവ / വിറ്റഴിഞ്ഞവ',
+    allRecords: 'എല്ലാ റെക്കോർഡുകളും',
+    sellUnits: '− വിൽപ്പന',
+    shopSettings: 'കടയുടെ ക്രമീകരണങ്ങൾ',
+    storeName: 'കടയുടെ പേര്',
+    accountEmail: 'ഇമെയിൽ',
+    currency: 'കറൻസി',
+    subPlan: 'സബ്സ്ക്രിപ്ഷൻ പ്ലാൻ',
+    proPlanDesc: 'Pro പ്ലാൻ (പരിധിയില്ലാത്ത ഉൽപ്പന്നങ്ങൾ)',
+    freeStarterDesc: 'സൗജന്യ പ്ലാൻ',
+    signOut: 'ലോഗ് ഔട്ട് ചെയ്യുക',
+    navDashboard: 'ഡാഷ്‌ബോർഡ്',
+    navProducts: 'ഉൽപ്പന്നങ്ങൾ',
+    navAdd: 'ചേർക്കുക',
+    navRescue: 'റെസ്ക്യൂ',
+    navSettings: 'സെറ്റിംഗ്സ്',
+  },
+} as const;
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +156,22 @@ export default function App() {
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [totalRescuedValue, setTotalRescuedValue] = useState<number>(0);
+
+  // Bilingual Language State ('en' | 'ml')
+  const [lang, setLang] = useState<'en' | 'ml'>(() => {
+    const saved = localStorage.getItem('expiryalert_lang');
+    return saved === 'ml' ? 'ml' : 'en';
+  });
+
+  const toggleLanguage = () => {
+    setLang((prev) => {
+      const next = prev === 'en' ? 'ml' : 'en';
+      localStorage.setItem('expiryalert_lang', next);
+      return next;
+    });
+  };
+
+  const t = UI_COPY[lang];
 
   // Subscription & Free Plan Limit State
   const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
@@ -372,32 +482,43 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-6">
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm">
               EA
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-1.5">
-                <Store className="w-3.5 h-3.5 text-indigo-600" />
-                <h1 className="text-sm font-bold text-slate-900 leading-tight">{businessName}</h1>
+                <Store className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
+                <h1 className="text-sm font-bold text-slate-900 leading-tight truncate">{businessName}</h1>
                 {userPlan === 'pro' && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                  <span className="inline-flex shrink-0 items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
                     <Crown className="w-2.5 h-2.5" /> PRO
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">ExpiryAlert Loss Prevention</p>
+              <p className="text-[11px] text-slate-500 font-medium truncate">{t.subtitle}</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* Malayalam / English Quick Toggle */}
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              title={lang === 'en' ? 'മലയാളത്തിലേക്ക് മാറ്റുക' : 'Switch to English'}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 active:scale-95 transition"
+            >
+              <Languages className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{lang === 'en' ? 'മലയാളം' : 'EN'}</span>
+            </button>
+
             <button 
               onClick={handleOpenAddModal}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 active:scale-95 transition"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Stock</span>
+              <span className="hidden sm:inline">{t.addStock}</span>
             </button>
 
             <button
@@ -418,11 +539,11 @@ export default function App() {
             {/* Free Plan Usage Bar */}
             {userPlan === 'free' && (
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
-                <div className="flex items-center gap-2 text-xs text-slate-600">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600">
                   <span className="font-semibold text-slate-900">
-                    Free Plan: {productCount} / {FREE_PRODUCT_LIMIT}
+                    {t.freePlan}: {productCount} / {FREE_PRODUCT_LIMIT}
                   </span>
-                  <span>products used</span>
+                  <span>{t.productsUsed}</span>
                 </div>
                 <button
                   type="button"
@@ -430,7 +551,7 @@ export default function App() {
                   className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 transition"
                 >
                   <Crown className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Upgrade (₹149/mo)</span>
+                  <span>{t.upgradeCta}</span>
                 </button>
               </div>
             )}
@@ -440,29 +561,29 @@ export default function App() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  Total Stock Purchase Value at Risk
+                  {t.riskHeader}
                 </span>
                 <span className="text-[11px] bg-amber-500/20 text-amber-300 font-medium px-2 py-0.5 rounded-full border border-amber-500/30">
-                  Expiring in ≤ 30 Days
+                  {t.expiring30Badge}
                 </span>
               </div>
               <div className="flex items-baseline space-x-2">
                 <span className="text-3xl md:text-4xl font-extrabold tracking-tight">
                   ₹{metrics.moneyAtRisk.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-xs text-slate-400">cost value</span>
+                <span className="text-xs text-slate-400">{t.costValue}</span>
               </div>
               
               <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-xs text-slate-300">
-                  Unsold inventory nearing expiry. Rescuing stock early prevents write-offs.
+                  {t.riskDesc}
                 </p>
                 <button
                   onClick={() => setIsDigestOpen(true)}
                   className="inline-flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-sm transition active:scale-95 shrink-0"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span>WhatsApp Staff Digest</span>
+                  <span>{t.whatsappDigest}</span>
                 </button>
               </div>
             </div>
@@ -471,49 +592,49 @@ export default function App() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1">
                 <div className="flex items-center justify-between text-rose-600">
-                  <span className="text-xs font-medium text-slate-500">Expiring ≤ 7 Days</span>
+                  <span className="text-xs font-medium text-slate-500">{t.exp7Days}</span>
                   <Flame className="w-4 h-4" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">{metrics.expiring7DaysCount}</div>
-                <p className="text-[11px] text-slate-400">Immediate action needed</p>
+                <p className="text-[11px] text-slate-400">{t.exp7Sub}</p>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1">
                 <div className="flex items-center justify-between text-amber-600">
-                  <span className="text-xs font-medium text-slate-500">Expiring ≤ 30 Days</span>
+                  <span className="text-xs font-medium text-slate-500">{t.exp30Days}</span>
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">{metrics.expiring30DaysCount}</div>
-                <p className="text-[11px] text-slate-400">Monitor closely</p>
+                <p className="text-[11px] text-slate-400">{t.exp30Sub}</p>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1">
                 <div className="flex items-center justify-between text-slate-500">
-                  <span className="text-xs font-medium text-slate-500">Already Expired</span>
+                  <span className="text-xs font-medium text-slate-500">{t.alreadyExpired}</span>
                   <TrendingDown className="w-4 h-4" />
                 </div>
                 <div className="text-2xl font-bold text-rose-600">
                   ₹{metrics.expiredLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
-                <p className="text-[11px] text-slate-400">Dead stock write-off</p>
+                <p className="text-[11px] text-slate-400">{t.deadStock}</p>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-1">
                 <div className="flex items-center justify-between text-emerald-600">
-                  <span className="text-xs font-medium text-slate-500">Stock Rescued</span>
+                  <span className="text-xs font-medium text-slate-500">{t.stockRescued}</span>
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div className="text-2xl font-bold text-emerald-600">
                   ₹{totalRescuedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
-                <p className="text-[11px] text-slate-400">Protected this month</p>
+                <p className="text-[11px] text-slate-400">{t.protectedMonth}</p>
               </div>
             </div>
 
             {/* Urgent Batches Feed */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">Urgent Batches Needing Attention</h3>
+                <h3 className="text-sm font-bold text-slate-900">{t.urgentTitle}</h3>
                 <span 
                   className="text-xs text-indigo-600 font-semibold cursor-pointer hover:underline" 
                   onClick={() => {
@@ -521,7 +642,7 @@ export default function App() {
                     setActiveTab('products');
                   }}
                 >
-                  View All ({activeBatches.length})
+                  {t.viewAll} ({activeBatches.length})
                 </span>
               </div>
 
@@ -535,16 +656,16 @@ export default function App() {
                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
                     <Package className="w-6 h-6" />
                   </div>
-                  <h3 className="text-base font-semibold text-slate-900">No active stock nearing expiry</h3>
+                  <h3 className="text-base font-semibold text-slate-900">{t.noActiveStock}</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    All current inventory batches are safe or resolved. Record new cartons to keep tracking.
+                    {t.noActiveDesc}
                   </p>
                   <button 
                     onClick={handleOpenAddModal}
                     className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 transition"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Add New Batch</span>
+                    <span>{t.addNewBatch}</span>
                   </button>
                 </div>
               ) : (
@@ -615,15 +736,15 @@ export default function App() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Inventory Batches</h2>
-                <p className="text-xs text-slate-500">Manage shelf stock, record customer sales, or inspect past resolved history.</p>
+                <h2 className="text-lg font-bold text-slate-900">{t.inventoryTitle}</h2>
+                <p className="text-xs text-slate-500">{t.inventoryDesc}</p>
               </div>
               <button 
                 onClick={handleOpenAddModal}
                 className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 self-start sm:self-auto"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Stock</span>
+                <span>{t.addStock}</span>
               </button>
             </div>
 
@@ -632,7 +753,7 @@ export default function App() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search by product name, brand, barcode, batch..."
+                placeholder={t.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition"
@@ -659,7 +780,7 @@ export default function App() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                In Stock ({activeBatches.length})
+                {t.inStock} ({activeBatches.length})
               </button>
 
               <button
@@ -670,7 +791,7 @@ export default function App() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Resolved / Out of Stock ({batches.filter((b) => b.quantity === 0).length})
+                {t.resolvedTab} ({batches.filter((b) => b.quantity === 0).length})
               </button>
 
               <button
@@ -681,7 +802,7 @@ export default function App() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                All Records ({batches.length})
+                {t.allRecords} ({batches.length})
               </button>
             </div>
 
@@ -743,7 +864,7 @@ export default function App() {
                             className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold shadow-sm active:scale-95 transition"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
-                            <span>− Sell Units</span>
+                            <span>{t.sellUnits}</span>
                           </button>
                         )}
                       </div>
@@ -791,19 +912,19 @@ export default function App() {
         {activeTab === 'settings' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
-              <h2 className="text-base font-bold text-slate-900">Shop Settings</h2>
+              <h2 className="text-base font-bold text-slate-900">{t.shopSettings}</h2>
               <div className="text-xs text-slate-600 space-y-2 border-b border-slate-100 pb-4">
-                <div>Store Name: <strong className="text-slate-900">{businessName}</strong></div>
-                <div>Account Email: <strong className="text-slate-900">{session.user.email}</strong></div>
-                <div>Currency: <strong className="text-slate-900">INR (₹)</strong></div>
+                <div>{t.storeName}: <strong className="text-slate-900">{businessName}</strong></div>
+                <div>{t.accountEmail}: <strong className="text-slate-900">{session.user.email}</strong></div>
+                <div>{t.currency}: <strong className="text-slate-900">INR (₹)</strong></div>
                 <div className="flex items-center justify-between pt-1">
                   <div>
-                    Subscription Plan:{' '}
+                    {t.subPlan}:{' '}
                     {userPlan === 'pro' ? (
-                      <strong className="text-emerald-700">Pro Plan (Unlimited Products)</strong>
+                      <strong className="text-emerald-700">{t.proPlanDesc}</strong>
                     ) : (
                       <strong className="text-slate-900">
-                        Free Starter ({productCount} / {FREE_PRODUCT_LIMIT} products)
+                        {t.freeStarterDesc} ({productCount} / {FREE_PRODUCT_LIMIT})
                       </strong>
                     )}
                   </div>
@@ -814,7 +935,7 @@ export default function App() {
                       className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg font-bold hover:bg-amber-200 transition"
                     >
                       <Crown className="w-3.5 h-3.5" />
-                      <span>Upgrade (₹149/mo)</span>
+                      <span>{t.upgradeCta}</span>
                     </button>
                   )}
                 </div>
@@ -824,7 +945,7 @@ export default function App() {
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100 transition"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Sign Out of Shop</span>
+                <span>{t.signOut}</span>
               </button>
             </div>
 
@@ -974,7 +1095,7 @@ export default function App() {
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         userEmail={session?.user?.email}
-        lang="en"
+        lang={lang}
       />
 
       {/* WhatsApp Staff Digest Modal */}
@@ -996,7 +1117,7 @@ export default function App() {
             }`}
           >
             <LayoutDashboard className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">Dashboard</span>
+            <span className="text-[10px]">{t.navDashboard}</span>
           </button>
 
           <button
@@ -1006,7 +1127,7 @@ export default function App() {
             }`}
           >
             <Package className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">Products</span>
+            <span className="text-[10px]">{t.navProducts}</span>
           </button>
 
           <button
@@ -1016,7 +1137,7 @@ export default function App() {
             <div className="w-11 h-11 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition">
               <QrCode className="w-5 h-5" />
             </div>
-            <span className="text-[10px] font-semibold text-indigo-600 mt-0.5">Add</span>
+            <span className="text-[10px] font-semibold text-indigo-600 mt-0.5">{t.navAdd}</span>
           </button>
 
           <button
@@ -1026,7 +1147,7 @@ export default function App() {
             }`}
           >
             <Flame className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">Rescue</span>
+            <span className="text-[10px]">{t.navRescue}</span>
           </button>
 
           <button
@@ -1036,7 +1157,7 @@ export default function App() {
             }`}
           >
             <Settings className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">Settings</span>
+            <span className="text-[10px]">{t.navSettings}</span>
           </button>
         </div>
       </nav>
