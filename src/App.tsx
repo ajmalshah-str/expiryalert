@@ -5,6 +5,7 @@ import AddProductModal from './components/AddProductModal';
 import StockRescue from './components/StockRescue';
 import WhatsAppDigestModal from './components/WhatsAppDigestModal';
 import AuditReport from './components/AuditReport';
+import UpgradeModal from './components/UpgradeModal';
 import { 
   LayoutDashboard, 
   Package, 
@@ -26,7 +27,8 @@ import {
   ShoppingCart,
   X,
   ArrowRight,
-  Search
+  Search,
+  Crown
 } from 'lucide-react';
 
 interface BatchItem {
@@ -45,6 +47,8 @@ interface BatchItem {
   } | null;
 }
 
+const FREE_PRODUCT_LIMIT = 30;
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -59,11 +63,35 @@ export default function App() {
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [totalRescuedValue, setTotalRescuedValue] = useState<number>(0);
 
+  // Subscription & Free Plan Limit State
+  const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
+  const [productCount, setProductCount] = useState<number>(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
   // Quick Sale / Deduct Modal State
   const [sellingBatch, setSellingBatch] = useState<BatchItem | null>(null);
   const [sellQty, setSellQty] = useState<number>(1);
   const [submittingSale, setSubmittingSale] = useState(false);
   const [saleError, setSaleError] = useState<string | null>(null);
+
+  // Fetch user subscription plan ('free' or 'pro')
+  const fetchUserPlan = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('plan')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (data?.plan === 'pro') {
+        setUserPlan('pro');
+      } else {
+        setUserPlan('free');
+      }
+    } catch (err) {
+      console.error('Error fetching user plan:', err);
+    }
+  };
 
   // Auto-healing store fetcher
   const fetchBusiness = async (userId: string) => {
@@ -100,7 +128,7 @@ export default function App() {
     }
   };
 
-  // Fetch all batches and total rescued value
+  // Fetch all batches, total product count, and total rescued value
   const fetchInventory = async (bizId: string) => {
     setLoadingInventory(true);
     try {
@@ -126,6 +154,16 @@ export default function App() {
 
       if (!error && data) {
         setBatches(data as unknown as BatchItem[]);
+      }
+
+      // Count distinct products in store for 30-product free limit
+      const { count } = await supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', bizId);
+
+      if (typeof count === 'number') {
+        setProductCount(count);
       }
 
       const { data: movements } = await supabase
@@ -154,19 +192,25 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchBusiness(session.user.id);
+      if (session) {
+        fetchUserPlan(session.user.id);
+        fetchBusiness(session.user.id);
+      }
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
+        fetchUserPlan(session.user.id);
         fetchBusiness(session.user.id);
       } else {
         setBusinessId(null);
         setBusinessName('My Store');
         setBatches([]);
         setTotalRescuedValue(0);
+        setUserPlan('free');
+        setProductCount(0);
       }
       setLoading(false);
     });
@@ -176,6 +220,15 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  // Gate opening Add Stock modal if free limit (30 products) is reached
+  const handleOpenAddModal = () => {
+    if (userPlan === 'free' && productCount >= FREE_PRODUCT_LIMIT) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    setIsModalOpen(true);
   };
 
   // Batches currently in stock
@@ -328,6 +381,11 @@ export default function App() {
               <div className="flex items-center space-x-1.5">
                 <Store className="w-3.5 h-3.5 text-indigo-600" />
                 <h1 className="text-sm font-bold text-slate-900 leading-tight">{businessName}</h1>
+                {userPlan === 'pro' && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                    <Crown className="w-2.5 h-2.5" /> PRO
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-500 font-medium">ExpiryAlert Loss Prevention</p>
             </div>
@@ -335,7 +393,7 @@ export default function App() {
 
           <div className="flex items-center space-x-2">
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenAddModal}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 active:scale-95 transition"
             >
               <Plus className="w-4 h-4" />
@@ -357,6 +415,26 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* Free Plan Usage Bar */}
+            {userPlan === 'free' && (
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-900">
+                    Free Plan: {productCount} / {FREE_PRODUCT_LIMIT}
+                  </span>
+                  <span>products used</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 transition"
+                >
+                  <Crown className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Upgrade (₹149/mo)</span>
+                </button>
+              </div>
+            )}
+
             {/* Signature Metric Card */}
             <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-6 shadow-md border border-slate-800">
               <div className="flex items-center justify-between mb-2">
@@ -462,7 +540,7 @@ export default function App() {
                     All current inventory batches are safe or resolved. Record new cartons to keep tracking.
                   </p>
                   <button 
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleOpenAddModal}
                     className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 transition"
                   >
                     <Plus className="w-4 h-4" />
@@ -541,7 +619,7 @@ export default function App() {
                 <p className="text-xs text-slate-500">Manage shelf stock, record customer sales, or inspect past resolved history.</p>
               </div>
               <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleOpenAddModal}
                 className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-700 self-start sm:self-auto"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -645,7 +723,11 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Batch #{batch.batch_number} • Qty: <strong className={isResolved ? 'text-slate-400' : 'text-slate-900 text-sm'}>{batch.quantity} units</strong> • Cost: ₹{Number(batch.purchase_price).toFixed(2)} {batch.selling_price ? `• MRP: ₹${batch.selling_price}` : ''}
+                          Batch #{batch.batch_number} • Qty:{' '}
+                          <strong className={isResolved ? 'text-slate-400' : 'text-slate-900 text-sm'}>
+                            {batch.quantity} units
+                          </strong>{' '}
+                          • Cost: ₹{Number(batch.purchase_price).toFixed(2)} {batch.selling_price ? `• MRP: ₹${batch.selling_price}` : ''}
                         </p>
                       </div>
 
@@ -686,7 +768,7 @@ export default function App() {
               </p>
             </div>
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenAddModal}
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold"
             >
               Enter Stock Manually Instead
@@ -714,6 +796,28 @@ export default function App() {
                 <div>Store Name: <strong className="text-slate-900">{businessName}</strong></div>
                 <div>Account Email: <strong className="text-slate-900">{session.user.email}</strong></div>
                 <div>Currency: <strong className="text-slate-900">INR (₹)</strong></div>
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    Subscription Plan:{' '}
+                    {userPlan === 'pro' ? (
+                      <strong className="text-emerald-700">Pro Plan (Unlimited Products)</strong>
+                    ) : (
+                      <strong className="text-slate-900">
+                        Free Starter ({productCount} / {FREE_PRODUCT_LIMIT} products)
+                      </strong>
+                    )}
+                  </div>
+                  {userPlan === 'free' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg font-bold hover:bg-amber-200 transition"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>Upgrade (₹149/mo)</span>
+                    </button>
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleLogout}
@@ -755,7 +859,8 @@ export default function App() {
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
               <div className="font-bold text-slate-900">{sellingBatch.products?.name}</div>
               <div className="text-slate-500">
-                Batch #{sellingBatch.batch_number} • Currently on shelf: <strong className="text-slate-800">{sellingBatch.quantity} units</strong>
+                Batch #{sellingBatch.batch_number} • Currently on shelf:{' '}
+                <strong className="text-slate-800">{sellingBatch.quantity} units</strong>
               </div>
               <div className="text-slate-500">
                 Tag Price: <strong className="text-slate-800">₹{sellingBatch.selling_price || sellingBatch.purchase_price}</strong>
@@ -861,6 +966,15 @@ export default function App() {
           if (businessId) fetchInventory(businessId);
         }}
         businessId={businessId}
+        onLimitReached={() => setShowUpgradeModal(true)}
+      />
+
+      {/* Upgrade to Pro Modal (₹149/month) */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        userEmail={session?.user?.email}
+        lang="en"
       />
 
       {/* WhatsApp Staff Digest Modal */}
@@ -896,7 +1010,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenAddModal}
             className="flex flex-col items-center -mt-4 py-1"
           >
             <div className="w-11 h-11 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition">

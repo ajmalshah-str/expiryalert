@@ -18,6 +18,7 @@ interface AddProductModalProps {
   onClose: () => void;
   onProductAdded: () => void;
   businessId: string | null;
+  onLimitReached?: () => void;
 }
 
 export default function AddProductModal({
@@ -25,6 +26,7 @@ export default function AddProductModal({
   onClose,
   onProductAdded,
   businessId,
+  onLimitReached,
 }: AddProductModalProps) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -187,6 +189,13 @@ export default function AddProductModal({
       onProductAdded();
       onClose();
     } catch (err: any) {
+      if (err?.message?.includes('FREE_LIMIT_REACHED')) {
+        onClose();
+        if (onLimitReached) {
+          onLimitReached();
+        }
+        return;
+      }
       setErrorMsg(err.message || 'Failed to add stock batch.');
     } finally {
       setLoading(false);
